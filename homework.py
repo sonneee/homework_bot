@@ -1,11 +1,11 @@
-import sys
-import os
-import requests
-import time
 import logging
-
+import os
+import sys
+import time
 from http import HTTPStatus
 from logging import StreamHandler
+
+import requests
 from dotenv import load_dotenv
 from telegram import Bot
 from telegram.error import TelegramError
@@ -14,7 +14,8 @@ from exceptions import (
     TokenDoesNotExist,
     APIResponseError,
     WrongHomeworkStatus,
-    NoHomeworkNameError
+    NoHomeworkNameError,
+    NoStatusError
 )
 
 
@@ -58,6 +59,7 @@ def check_tokens():
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
+    logger.debug('Попытка отправить сообщение')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.debug('Сообщение успешно отправлено')
@@ -67,6 +69,7 @@ def send_message(bot, message):
 
 def get_api_answer(timestamp):
     """Делает запрос к эндпоинту API-сервиса."""
+    logger.debug('Попытка выполнить запрос к API')
     try:
         homework_statuses = requests.get(ENDPOINT,
                                          headers=HEADERS,
@@ -80,24 +83,15 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
-    expected_response = {
-        'id': int,
-        'status': str,
-        'homework_name': str,
-        'reviewer_comment': str,
-        'date_updated': str,
-        'lesson_name': str,
-    }
     if isinstance(response, dict):
-        homeworks = response.get('homeworks')
-        if homeworks is None or not isinstance(homeworks, list):
+        if 'homeworks' in response.keys():
+            homeworks = response['homeworks']
+            if isinstance(homeworks, list):
+                return homeworks
+            else:
+                raise TypeError
+        else:
             raise TypeError
-        if not homeworks == []:
-            for homework in homeworks:
-                for key, value_type in expected_response.items():
-                    value = homework.get(key)
-                    if value is not None and not isinstance(value, value_type):
-                        raise TypeError
     else:
         raise TypeError
 
@@ -105,9 +99,11 @@ def check_response(response):
 def parse_status(homework):
     """Возвращает статус домашней работы."""
     homework_name = homework.get('homework_name')
-    if homework_name is None:
-        raise NoHomeworkNameError
     status = homework.get('status')
+    if 'homework_name' not in homework.keys():
+        raise NoHomeworkNameError
+    if 'status' not in homework.keys():
+        raise NoStatusError
     if status in HOMEWORK_VERDICTS.keys():
         verdict = HOMEWORK_VERDICTS.get(status)
         return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -130,8 +126,7 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            check_response(response)
-            homeworks = response.get('homeworks')
+            homeworks = check_response(response)
             if len(homeworks) > 0 and last_homework != homeworks[0]:
                 last_homework = homeworks[0]
                 message = parse_status(last_homework)
@@ -139,21 +134,13 @@ def main():
             else:
                 logger.debug('Отсутствуют новые статусы')
 
-        except APIResponseError as error:
+        except (APIResponseError, TypeError, WrongHomeworkStatus) as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(message)
             send_message(bot, message)
 
-        except TypeError as error:
-            message = f'Сбой в работе программы: {error}'
-            logger.error(message)
-            send_message(bot, message)
-
-        except WrongHomeworkStatus as error:
-            message = f'Сбой в работе программы: {error}'
-            logger.error(message)
-            send_message(bot, message)
-        time.sleep(RETRY_PERIOD)
+        finally:
+            time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':

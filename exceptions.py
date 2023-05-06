@@ -20,3 +20,9 @@ class NoHomeworkNameError(Exception):
     """Отстутствует ключ 'homework_name' в ответе API."""
 
     pass
+
+
+class NoStatusError(Exception):
+    """Отстутствует ключ 'status' в ответе API."""
+
+    pass
