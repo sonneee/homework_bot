@@ -83,17 +83,16 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
-    if isinstance(response, dict):
-        if 'homeworks' in response.keys():
-            homeworks = response['homeworks']
-            if isinstance(homeworks, list):
-                return homeworks
-            else:
-                raise TypeError
-        else:
-            raise TypeError
-    else:
+    if not isinstance(response, dict):
         raise TypeError
+    if 'homeworks' not in response.keys():
+        raise TypeError
+    if 'current_date' not in response.keys():
+        raise TypeError
+    homeworks = response['homeworks']
+    if not isinstance(homeworks, list):
+        raise TypeError
+    return homeworks
 
 
 def parse_status(homework):
@@ -107,8 +106,7 @@ def parse_status(homework):
     if status in HOMEWORK_VERDICTS.keys():
         verdict = HOMEWORK_VERDICTS.get(status)
         return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    else:
-        raise WrongHomeworkStatus
+    raise WrongHomeworkStatus
 
 
 def main():
@@ -135,7 +133,7 @@ def main():
                 logger.debug('Отсутствуют новые статусы')
 
         except (APIResponseError, TypeError, WrongHomeworkStatus) as error:
-            message = f'Сбой в работе программы: {error}'
+            message = f'Сбой в работе программы: {type(error).__doc__}'
             logger.error(message)
             send_message(bot, message)
 
