@@ -54,7 +54,7 @@ HOMEWORK_VERDICTS = {
 def check_tokens():
     """Проверяет доступность переменных окружения."""
     if not all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
-        raise TokenDoesNotExist
+        raise TokenDoesNotExist('Отсутствует токен')
 
 
 def send_message(bot, message):
@@ -75,23 +75,23 @@ def get_api_answer(timestamp):
                                          headers=HEADERS,
                                          params={'from_date': timestamp})
     except requests.RequestException:
-        raise APIResponseError
+        raise APIResponseError('Ошибка ответа API')
     if homework_statuses.status_code != HTTPStatus.OK:
-        raise APIResponseError
+        raise APIResponseError('Ошибка ответа API')
     return homework_statuses.json()
 
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
     if not isinstance(response, dict):
-        raise TypeError
+        raise TypeError('Ответ не является словарем')
     if 'homeworks' not in response.keys():
-        raise TypeError
+        raise TypeError('В ответе отсутствует ключ homeworks')
     if 'current_date' not in response.keys():
-        raise TypeError
+        raise TypeError('В ответе отсутствует ключ current_date')
     homeworks = response['homeworks']
     if not isinstance(homeworks, list):
-        raise TypeError
+        raise TypeError('Ключу homeworks соответствует не список')
     return homeworks
 
 
@@ -100,13 +100,13 @@ def parse_status(homework):
     homework_name = homework.get('homework_name')
     status = homework.get('status')
     if 'homework_name' not in homework.keys():
-        raise NoHomeworkNameError
+        raise NoHomeworkNameError('Отстутствует ключ homework_name в ответе')
     if 'status' not in homework.keys():
-        raise NoStatusError
+        raise NoStatusError('Отстутствует ключ status в ответе')
     if status in HOMEWORK_VERDICTS.keys():
         verdict = HOMEWORK_VERDICTS.get(status)
         return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    raise WrongHomeworkStatus
+    raise WrongHomeworkStatus('Неизвестный статус домашней работы')
 
 
 def main():
@@ -133,7 +133,7 @@ def main():
                 logger.debug('Отсутствуют новые статусы')
 
         except (APIResponseError, TypeError, WrongHomeworkStatus) as error:
-            message = f'Сбой в работе программы: {type(error).__doc__}'
+            message = f'Сбой в работе программы: {error}'
             logger.error(message)
             send_message(bot, message)
 
